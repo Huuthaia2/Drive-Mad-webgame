@@ -1,0 +1,1769 @@
+<!DOCTYPE html>
+<!-- saved from url=(0061)https://indigo.minigame.vip/game/drive-mad/play?from=box_list -->
+<html lang="en" class=""><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>Play Drive Mad and Have Fun</title>
+        <meta name="oppo_title" content="Drive Mad">
+        <meta name="oppo_icon" content="https://res.minigame.vip/gc-assets/drive-mad/drive-mad_icon_132.png">
+    <script>
+    const util = {
+      throttle(fn, wait) {
+        let inThrottle, lastFn, lastTime;
+        return function () {
+          const context = this,
+            args = arguments;
+          if (!inThrottle) {
+            fn.apply(context, args);
+            lastTime = Date.now();
+            inThrottle = true;
+          } else {
+            clearTimeout(lastFn);
+            lastFn = setTimeout(function () {
+              if (Date.now() - lastTime >= wait) {
+                fn.apply(context, args);
+                lastTime = Date.now();
+              }
+            }, Math.max(wait - (Date.now() - lastTime), 0));
+          }
+        };
+      },
+      isMobile() {
+        return window.navigator.userAgent.match(
+          /(phone|pad|pod|iPhone|iPod|ios|iPad|Android|Mobile|Symbian|Windows Phone)/i
+        );
+      },
+      getAllUrlParams(url) {
+        var queryString = url ? url.split('?')[1] : window.location.search.slice(1);
+        var obj = {};
+        if (!queryString) {
+          return obj;
+        }
+        // stuff after # is not part of query string, so get rid of it
+        queryString = queryString.split('#')[0];
+        var arr = queryString.split('&');
+        for (var i = 0; i < arr.length; i++) {
+          var a = arr[i].split('=');
+          var paramName = a[0];
+          var paramValue = typeof (a[1]) === 'undefined' ? true : a[1];
+          paramName = paramName.toLowerCase();
+          if (typeof paramValue === 'string') paramValue = paramValue.toLowerCase();
+          if (paramName.match(/\[(\d+)?\]$/)) {
+            var key = paramName.replace(/\[(\d+)?\]/, '');
+            if (!obj[key]) obj[key] = [];
+            if (paramName.match(/\[\d+\]$/)) {
+              var index = /\[(\d+)\]/.exec(paramName)[1];
+              obj[key][index] = paramValue;
+            } else {
+              obj[key].push(paramValue);
+            }
+          } else {
+            if (!obj[paramName]) {
+              obj[paramName] = paramValue;
+            } else if (obj[paramName] && typeof obj[paramName] === 'string') {
+              obj[paramName] = [obj[paramName]];
+              obj[paramName].push(paramValue);
+            } else {
+              obj[paramName].push(paramValue);
+            }
+          }
+        }
+        return obj;
+      },
+      loadJsAsync(src, async, attribute) {
+        return new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = src;
+          script.async = async;
+          if (attribute) {
+            for (const key in attribute) {
+              script.setAttribute(key, attribute[key]);
+            }
+          }
+    
+          const onload = () => {
+            console.info("js loaded: ", src);
+            script.removeEventListener("load", onload);
+            resolve();
+          };
+    
+          script.addEventListener("load", onload);
+          script.addEventListener("error", (err) => {
+            script.removeEventListener("load", onload);
+            console.error("loading js error: ", src, err);
+            reject(new Error(`Failed to load ${src}`));
+          });
+    
+          (
+            document.getElementsByTagName("head")[0] || document.documentElement
+          ).appendChild(script);
+        });
+      },
+      loadImageAsync(url, callbackFunc) {
+        return new Promise(function (resolve, reject) {
+          var img = new Image();
+          img.onload = function () {
+            img.onload = null;
+            console.info("success to load image");
+            resolve(img);
+            callbackFunc && (callbackFunc instanceof Function) && callbackFunc(img);
+          };
+          img.error = function () {
+            reject('fail to load image');
+          };
+          img.src = url;
+        })
+      },
+      setDragScrollEvent(selector) {
+        const gameShowEle = document.querySelector(selector);
+        let left = 0;
+        let oldLeft = 0;
+        const move = util.throttle((event) => {
+          let x = left + (oldLeft - event.clientX)
+          if (x < 0) x = 0;
+          gameShowEle.scrollTo(x, 0);
+        }, 100)
+        gameShowEle.addEventListener('mousedown', function (event) {
+          gameShowEle.style.cursor = 'grabbing';
+          gameShowEle.style.userSelect = 'none';
+          oldLeft = event.clientX;
+          left = gameShowEle.scrollLeft;
+          document.addEventListener('mousemove', move)
+        });
+        document.addEventListener('mouseup', function () {
+          gameShowEle.style.cursor = 'pointer';
+          gameShowEle.style.removeProperty('user-select');
+          document.removeEventListener('mousemove', move)
+        })
+      },
+      setHistoryGame(appId, maxHistoryCount) {
+        const HISTORY_KEY = "gameHistoryList";
+        const fnUnique = function (arr, uKey) {
+          const map = new Map();
+          arr.forEach((item, index) => {
+            if (!map.has(item[uKey])) {
+              map.set(item[uKey], item);
+            }
+          });
+          return [...map.values()];
+        };
+    
+        try {
+          let localGameList = JSON.parse(localStorage.getItem(HISTORY_KEY));
+          if (!localGameList) {
+            localGameList = [];
+          }
+    
+          const obj = {
+            id: appId,
+          };
+          localGameList.splice(0, 0, obj);
+    
+          localGameList = fnUnique(localGameList, "id");
+    
+          if (localGameList.length > maxHistoryCount) {
+            localGameList = localGameList.slice(0, maxHistoryCount);
+          }
+    
+          localStorage.setItem("gameHistoryList", JSON.stringify(localGameList));
+        } catch (e) {
+          console.error("add history error:", e);
+        }
+      },
+      getHistoryGames() {
+        try {
+          const HISTORY_KEY = "gameHistoryList";
+          const temp = (localStorage.getItem(HISTORY_KEY)) && JSON.parse(localStorage.getItem(HISTORY_KEY));
+          if (temp && temp != null) {
+            return temp;
+          }
+        } catch (e) {
+          console.error("get history error:", e);
+        }
+        return [];
+      },
+      getCandidateGameList(
+        allGames,
+        historyGames,
+        config,
+        excludeList
+      ) {
+        if (!allGames) {
+          return;
+        }
+    
+        if (!config) {
+          return;
+        }
+    
+        const fnNotInclude = (appId) => {
+          if (!excludeList) {
+            return true;
+          }
+          return !excludeList.includes(appId);
+        };
+    
+        const dealAppsByConfigToSort = (oldApps, configNavApps) => {
+          let newNavApps = oldApps;
+          if (configNavApps && oldApps) {
+            const maxIndex = newNavApps.length || 0;
+            newNavApps.forEach((m) => {
+              const index = configNavApps.findIndex((y) => y === m.app_id);
+              if (index > -1) {
+                m.orderIndex = index;
+              } else {
+                m.orderIndex = maxIndex;
+              }
+            });
+            newNavApps = newNavApps.sort((x, y) => x.orderIndex - y.orderIndex);
+            newNavApps = newNavApps.map((m) => {
+              delete m.orderIndex;
+              return m;
+            });
+          }
+          return newNavApps;
+        }
+    
+        const navApps = [];
+        let historyIndex = 0;
+        for (let i = 0; i < config.history; i++) {
+          if (i >= historyGames.length) {
+            break;
+          }
+          if (historyIndex >= historyGames.length) {
+            break;
+          }
+          const historyAppId = historyGames[historyIndex] && historyGames[historyIndex].id;
+          const historyApp = allGames.find(
+            (app) => app.app_id === historyAppId
+              && fnNotInclude(app.app_id)
+          );
+          if (historyApp) {
+            navApps.push({
+              id: historyApp.app_id,
+              icon: historyApp.game_material.icon,
+              name: historyApp.base.display_name,
+              history: true,
+            });
+          } else {
+            i--;
+          }
+          historyIndex++;
+        }
+    
+        let moreGames = config.count - navApps.length;
+        let fiterHistoryApps = allGames.filter((m) => {
+          if (navApps && navApps.length > 0) {
+            const index = navApps.findIndex((y) => y.id === m.app_id);
+            return index === -1;
+          } else {
+            return true;
+          }
+        });
+    
+        fiterHistoryApps = dealAppsByConfigToSort(fiterHistoryApps, config.apps);
+    
+        if (config.count <= 0) {
+          moreGames = fiterHistoryApps.length;
+        }
+        if (moreGames > 0) {
+          const fnInPresetList = (appId) => {
+            if (
+              !config.apps ||
+              config.apps == null ||
+              config.apps.length <= 0 ||
+              config.count <= 0
+            ) {
+              return true;
+            }
+            return config.apps.includes(appId);
+          };
+    
+          for (let i = 0; i < fiterHistoryApps.length && moreGames > 0; i++) {
+            const app = fiterHistoryApps[i];
+            if (
+              navApps.findIndex((existingApp) => existingApp.id === app.id) > -1
+            ) {
+              continue;
+            }
+            if (fnNotInclude(app.app_id) && fnInPresetList(app.app_id)) {
+              navApps.push({
+                id: app.app_id,
+                icon: app.game_material.icon,
+                name: app.base.display_name,
+                history: false,
+              });
+              moreGames--;
+            }
+          }
+        }
+    
+        return navApps;
+      },
+      getGamemenuCommonSites(
+        historyGames,
+        menuSite,
+        excludeList
+      ) {
+        if (!(menuSite && menuSite.gamemenuCommonSites && menuSite.gamemenuCommonSites.length)) {
+          return;
+        }
+    
+        const fnNotInclude = (appId) => {
+          if (!excludeList) {
+            return true;
+          }
+          return !excludeList.includes(appId);
+        };
+    
+        let navSites = JSON.parse(JSON.stringify(menuSite.gamemenuCommonSites));
+        navSites = navSites.filter(site => site && site.detail && fnNotInclude(site.detail.app_id))
+        let history = 0, count = 0;
+        if (menuSite.options && menuSite.options.history) {
+          menuSite.options.history && (history = +menuSite.options.history);
+          menuSite.options.count && (count = +menuSite.options.count);
+        }
+    
+        let historyIndex = 0; putHistorySiteIndex = 0;
+        for (let i = 0; i < history; i++) {
+          if (i >= historyGames.length) {
+            break;
+          }
+          if (historyIndex >= historyGames.length) {
+            break;
+          }
+          const historyAppId = historyGames[historyIndex] && historyGames[historyIndex].id;
+          const historySiteIndex = navSites.findIndex(
+            (site) => site && site.type === 1 && site.detail && site.detail.app_id === historyAppId
+              && fnNotInclude(site.detail.app_id)
+          );
+          if (historySiteIndex !== -1) {
+            const sites = navSites.splice(historySiteIndex, 1);
+            const site = sites && sites.length && sites[0] || null;
+            site && (site.history = true, navSites.splice(putHistorySiteIndex, 0, site));
+            putHistorySiteIndex++;
+          } else {
+            i--;
+          }
+          historyIndex++;
+        }
+    
+        if (count > 0) {
+          navSites = navSites.slice(0, count);
+        }
+        return navSites;
+      },
+      storage: {
+        setItmeToObjectForLocalStorage(key, objectKeyName, objectValueitem) {
+          let res = false
+          try {
+            const _localStorageObjectStr = localStorage.getItem(key);
+            let _localStorageObject = { [objectKeyName]: objectValueitem };
+            if (_localStorageObjectStr) {
+              _localStorageObject = JSON.parse(_localStorageObjectStr);
+              _localStorageObject[objectKeyName] = objectValueitem;
+            }
+            localStorage.setItem(key, JSON.stringify(_localStorageObject));
+            res = true;
+          } catch (error) {
+            console.error(error);
+          }
+          return res
+        },
+        getItmeFromObjectForLocalStorage(key, objectKeyName) {
+          let res = null;
+          try {
+            const _localStorageObjectStr = localStorage.getItem(key);
+            if (_localStorageObjectStr) {
+              const _localStorageObject = JSON.parse(_localStorageObjectStr);
+              res = _localStorageObject && _localStorageObject[objectKeyName];
+            }
+          } catch (error) {
+            console.error(error);
+          }
+          return res
+        }
+      },
+      formatUrl(url) {
+        if (url.indexOf("st=") === -1) {
+          if (url.indexOf("?") === -1) {
+            url = `${url}?st=${new Date().getTime()}`;
+          } else {
+            url = `${url}&st=${new Date().getTime()}`;
+          }
+        }
+        return url;
+      },
+      openPageByA(url, target) {
+        const a = document.createElement("a");
+        a.href = url;
+        a.target = target || "_blank";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      },
+      logEvent(gtag, eventName, category, label, value, nonInteraction) {
+        if (gtag) {
+          let params = null;
+          if (category !== undefined || label !== undefined || value !== undefined || nonInteraction !== undefined) {
+            params = {};
+            (category !== undefined) && (params.event_category = category);
+            (label !== undefined) && (params.event_label = label);
+            (value !== undefined) && (params.value = value);
+            (nonInteraction !== undefined) && (params.nonInteraction = nonInteraction);
+          }
+          params === null && (gtag('event', eventName));
+          params !== null && (gtag('event', eventName, params));
+        }
+      },
+      getSubChannelIdFromLocation() {
+        const subChannelIdFromLocation = location.pathname.split('/')[1] // 从地址中取出动态子渠道名称
+        const lowerSubChannelIdFromLocation=subChannelIdFromLocation.toLowerCase();
+        const excludeList = ['', '/', 'home', 'privacy', 'terms', 'gamebox', 'today', 'game', 'v1', 'main', 'debug', 'activity']
+        const hasSubChannelId = !excludeList.includes(lowerSubChannelIdFromLocation) && !(/\./ig.test(lowerSubChannelIdFromLocation))
+        return { hasSubChannelId, subChannelIdFromLocation }
+      },
+      /**
+       * 静态页面动态替换子渠道链接
+       */
+      replaceSubChannelId() {
+        const links = Array.from(document.getElementsByTagName('a'))
+        const sameOriginLinks = links.filter(link => link.href.startsWith(location.origin))
+        const { hasSubChannelId, subChannelIdFromLocation } = this.getSubChannelIdFromLocation();
+        if (hasSubChannelId) {
+          sameOriginLinks.forEach(link => {
+            const originHref = link.getAttribute('href');
+            const originHrefPrefix = originHref && originHref.split("/") && originHref.split("/")[1] || "";
+            if (originHrefPrefix.toLocaleLowerCase() !== subChannelIdFromLocation.toLocaleLowerCase()) {
+              const href = originHref.startsWith('/main') ? originHref.replace('main', subChannelIdFromLocation) : `/${subChannelIdFromLocation}${originHref}`
+              link.setAttribute('href', href)
+            }
+          })
+        }
+      }
+    };
+    </script>    <script>
+        const lazyLoadImgObj = {
+            isIn(el) {
+                var bound = el.getBoundingClientRect();
+                var clientHeight = window.innerHeight;
+                return el.getAttribute("lazy") === "loading" && bound.top <= clientHeight;
+            },
+            checkImg() {
+                let imgs = document.querySelectorAll("img[lazy='loading']");
+                Array.from(imgs).forEach((el) => {
+                if (lazyLoadImgObj.isIn(el)) {
+                    lazyLoadImgObj.loadImg(el);
+                }
+                });
+            },
+            loadImg(el) {
+                if (el.src !== el.dataset.src) {
+                el.src = el.dataset.src;
+                el.setAttribute("lazy", "loaded");
+                }
+            },
+        };
+        const checkImgFunc = util.throttle(lazyLoadImgObj.checkImg, 500);
+    </script>    <script>
+    const playObj = {
+      page: "",
+      disableAds: false,
+      bannerEnabled: false,
+      globalPlatformInfo: null,
+      gameInfo: null,
+      gameOption: null,
+      loadPageConfig: null,
+      currentStage: 0,
+      currentProgress: 0,
+      percent: 0,
+      isLoading: true,
+      ifExecShowPreroll: false,
+      GAMECENTER_SDK_URL: "",
+      subChannelId: "/",
+      enterLoadFunc: () => { },
+      ifTestSpeedChannel: false,
+      ifIranChannel: false,
+      isAllowLocalhostTest: false,
+      ifLogEvent: false,
+      ifSetXiaomiIframe: false,
+      init({ globalPlatformInfo, disableAds, bannerEnabled, gameInfo, loadPageConfig, gameOption, GAMECENTER_SDK_URL, enterLoadFunc, subChannelId, ifTestSpeedChannel, isIranAd, isAllowLocalhostTest, ifLogEvent, page, ifSetXiaomiIframe, ifshowAdForXiaomiNoLoading }) {
+        this.globalPlatformInfo = globalPlatformInfo;
+        const { hasSubChannelId, subChannelIdFromLocation } = util.getSubChannelIdFromLocation()
+        this.subChannelId = hasSubChannelId ? '/' + subChannelIdFromLocation + '/' : subChannelId;
+        this.disableAds = disableAds;
+        this.gameInfo = gameInfo;
+        this.loadPageConfig = loadPageConfig;
+        this.gameOption = gameOption;
+        this.bannerEnabled = bannerEnabled;
+        this.enterLoadFunc = enterLoadFunc;
+        this.GAMECENTER_SDK_URL = GAMECENTER_SDK_URL;
+        this.ifTestSpeedChannel = ifTestSpeedChannel;
+        this.ifIranChannel = isIranAd;
+        this.isAllowLocalhostTest = isAllowLocalhostTest;
+        this.ifLogEvent = ifLogEvent;
+        this.page = page;
+        if (ifSetXiaomiIframe) {
+          this.ifSetXiaomiIframe = ifSetXiaomiIframe;
+          if (ifshowAdForXiaomiNoLoading === false) {
+            this.bannerEnabled = false;
+          }
+        }
+        if (util.isMobile()) {
+          this.listenWhirl();
+          window.addEventListener(
+            "orientationchange",
+            this.listenWhirl.bind(this),
+            false
+          );
+        }
+        const scrollbarEle = document.querySelector(".scrollbar");
+        scrollbarEle&&scrollbarEle.addEventListener("scroll", checkImgFunc);
+      },
+      initCurrentStage() {
+        try {
+          if (this.loadPageConfig.firstStage.masterSwitch) {
+            this.currentStage = 1;
+          } else if (
+            !this.loadPageConfig.firstStage.masterSwitch &&
+            this.loadPageConfig.secondStage.masterSwitch
+          ) {
+            this.currentStage = 2;
+          } else if (
+            !this.loadPageConfig.firstStage.masterSwitch &&
+            !this.loadPageConfig.secondStage.masterSwitch &&
+            this.loadPageConfig.thirdStage.masterSwitch
+          ) {
+            this.currentStage = 3;
+          }
+        } catch (error) {
+          console.log(error)
+        }
+      },
+      showPreroll() {
+        if(!this.disableAds){
+            try {
+                const adsenseAdBreak = window.showProllAsync;
+                if (adsenseAdBreak) {
+                    console.info("===> show adsense preroll");
+                    adsenseAdBreak();
+                    this.ifExecShowPreroll = true;
+                } else {
+                    console.info("===> no adBreak, adsense not ready");
+                }
+            } catch (e) {
+                console.error("showPreroll error: ", e);
+            }
+        }
+      },
+      updateStage(nextStage) {
+        if (
+          nextStage === 2 &&
+          !this.loadPageConfig.secondStage.masterSwitch &&
+          this.loadPageConfig.thirdStage.masterSwitch
+        ) {
+          this.currentStage = 3;
+        } else if (
+          nextStage === 2 &&
+          !this.loadPageConfig.secondStage.masterSwitch &&
+          !this.loadPageConfig.thirdStage.masterSwitch
+        ) {
+          this.currentStage = 0;
+        } else {
+          if (
+            this.currentStage === 2 &&
+            !this.loadPageConfig.thirdStage.masterSwitch
+          ) {
+            isLoading = false;
+          }
+          this.currentStage = nextStage;
+        }
+      },
+      hideXiaomiLoading() {
+        const stageCtx = document.querySelector("#playPage>#stageCtx");
+        if (stageCtx) {
+          if (this.bannerEnabled) {
+            stageCtx.style.position = "";
+            const dialog = stageCtx.querySelector("#dialog");
+            if (dialog) {
+              dialog.style.position = "inherit";
+              const stageCtxLayout = stageCtx.querySelector(".stageCtxLayout");
+              if (stageCtxLayout) {
+                stageCtxLayout.style.position = "inherit";
+                stageCtxLayout.style.height = "auto";
+                stageCtxLayout.style.width = "100%";
+                const loadFullScreenMask = stageCtxLayout.querySelector("#loadFullScreenMask ");
+                loadFullScreenMask && loadFullScreenMask.remove();
+                const loadingCircle = stageCtxLayout.querySelector(".loadingCircle ");
+                if (loadingCircle) {
+                  loadingCircle.style.height = "auto";
+                  loadingCircle.style.background = "rgba(0, 0, 0)";
+                }
+                const loadingMain = stageCtxLayout.querySelector(".loadingMain ");
+                if (loadingMain) {
+                  [...loadingMain.childNodes].forEach(ele => {
+                    if (ele && (ele.classList && !ele.classList.contains("ad") || !ele.classList)) {
+                      ele.remove();
+                    }
+                  })
+                }
+              }
+            }
+          } else {
+            const stageCtxLayout = stageCtx.querySelector(".stageCtxLayout");
+            stageCtxLayout && stageCtxLayout.remove();
+          }
+        }
+      },
+      hideLoadingMask() {
+        this.isLoading = false;
+        if (!this.ifExecShowPreroll && this.loadPageConfig.otherStage.preroll) {
+          this.showPreroll();
+        }
+        if (this.ifSetXiaomiIframe) {
+          this.hideXiaomiLoading();
+        } else {
+          const stageCtxLayoutEles = document.querySelectorAll(".stageCtxLayout")
+          stageCtxLayoutEles && (stageCtxLayoutEles.forEach(m => m.remove()));
+        }
+        const objDialogBgc = document.getElementById("dialog");
+        objDialogBgc.style.backgroundColor = "black";
+        this.displayMenu();
+        this.enterLoadFunc();
+      },
+      displayMenu() {
+        const stretchBtnCtxEle = document.getElementById("stretchBtnCtx");
+        if (stretchBtnCtxEle && ((!this.isLoading && this.currentStage !== 0) || this.currentStage === 0)) {
+          stretchBtnCtxEle.style.visibility = "visible";
+        }
+      },
+      displayStage() {
+        const fristStageEle = document.getElementById("fristStage");
+        const threeStageEle = document.getElementById("threeStage");
+        const stageCtxLayoutEles = document.querySelectorAll(`.stageCtxLayout`);
+        const dialogEle = document.getElementById("dialog");
+        if (this.loadPageConfig.otherStage.loadingMethod === "fullScreen") {
+          this.step();
+          if (this.getIfIsOpenPage()) {
+            setTimeout(() => {
+              this.updateLoadingProgress(100);
+              util.openPageByA(this.getGamePageUrlForBlank());
+            }, [5, 6, 7, 8, 9, 10][Math.floor(Math.random() * 5)] * 1000)
+          }
+        } else {
+          switch (this.currentStage) {
+            case 0:
+              stageCtxLayoutEles && (stageCtxLayoutEles.forEach(m => m.remove()));
+              dialogEle && (dialogEle.style.backgroundColor = "black");
+              if (!this.ifExecShowPreroll && this.loadPageConfig.otherStage.preroll) {
+                this.showPreroll();
+              }
+              break;
+            case 1:
+              fristStageEle && (fristStageEle.style.display = "");
+              const fristStageCtx_play = fristStageEle && fristStageEle.querySelector("#play");
+              if (fristStageEle && fristStageCtx_play) {
+                fristStageCtx_play.addEventListener("click", () => {
+                  this.logEvent("play_btn", false);
+                  if (this.getIfIsOpenPage()) {
+                    util.openPageByA(this.getGamePageUrlForBlank());
+                  } else {
+                    this.updateStage(this.loadPageConfig.thirdStage.masterSwitch ? 3 : 0)
+                    this.displayStage();
+                  }
+                })
+              }
+              break;
+            case 2:
+              break;
+            case 3:
+              fristStageEle && (fristStageEle.remove());
+              threeStageEle && (threeStageEle.style.display = "");
+              this.step();
+              break;
+          }
+        }
+        this.displayMenu();
+      },
+      logEvent(eventName, nonInteraction) {
+        this.ifLogEvent && window.gtag && util.logEvent(window.gtag, eventName, this.page, this.gameInfo && this.gameInfo.app_id || "", 0, nonInteraction === false ? false : true);
+      },
+      selectLoadMode() {
+        this.initGameCenterSdkAsync().then(() => {
+          console.info("gamecenter sdk ready");
+          this.loadGame();
+        }).catch((err) => {
+          console.error("init Sdk error: ", err);
+        });
+      },
+      initGameCenterSdkAsync() {
+        let sdk = this.GAMECENTER_SDK_URL;
+        if (sdk) {
+          sdk = util.formatUrl(sdk);
+        }
+        return util.loadJsAsync(sdk, false).then(() => {
+    
+          this.ifTestSpeedChannel && (typeof window.androidInteractive === 'object') && window.androidInteractive.trackEvent({ target: 'loaded_sdk', start: window.performance.now(), isStart: true });
+          const minigameCenter = window.minigameCenter;
+          console.assert(
+            typeof minigameCenter !== "undefined",
+            "gamecenter is not defined"
+          );
+          console.info("====> init gamecenter service");
+    
+          //registerLogEvent func none 
+          if (window.gtag) {
+            const gtag = window.gtag;
+            const logEvent = util.logEvent;
+            window.localLogger = [];
+            const gaEvent = (category, eventName, label, value, nonInteraction) => {
+              window.localLogger.push({ category, eventName, label, value, nonInteraction });
+              this.ifLogEvent && logEvent(gtag, eventName, this.page, this.gameInfo && this.gameInfo.app_id || "", value, nonInteraction);
+            }
+            minigameCenter.registerLogEvent(gaEvent);
+          }
+    
+          minigameCenter.startServiceServer();
+          this.registerGamingServices();
+          const configUrl = this.gameInfo.config_url;
+          return this.loadGameOptionAndInitAsync(configUrl);
+        });
+      },
+      registerGamingServices() {
+        const gameId = this.gameInfo.app_id;
+        window.minigameCenter.receiveCommonData && (window.minigameCenter.receiveCommonData(this.globalPlatformInfo || {}));
+    
+        window.minigameCenter.registerProgressService((requestPayload) => {
+          this.updateLoadingProgress(requestPayload.progress);
+        });
+        window.minigameCenter.registerInitGameService((requestPayload) => {
+          this.logEvent("sdk_init");
+          console.log("init game:", requestPayload);
+          this.ifTestSpeedChannel && (typeof window.androidInteractive === 'object') && window.androidInteractive.trackEvent({ target: 'init_sdk', start: window.performance.now() });
+        });
+        window.minigameCenter.registerStartGameService((requestPayload) => {
+          this.logEvent("sdk_start");
+          console.log("start game", requestPayload);
+          this.updateLoadingProgress(100);
+          this.ifTestSpeedChannel && (typeof window.androidInteractive === 'object') && window.androidInteractive.commonEvent();
+          this.ifTestSpeedChannel && (typeof window.androidInteractive === 'object') && window.androidInteractive.trackEvent({ target: 'start_game', start: window.performance.now(), isEnd: true });
+        });
+      },
+      loadGameOptionAndInitAsync(configUrl) {
+        return window.minigameCenter.loadConfigAsync(configUrl).then((option) => {
+          console.log("load config:", option);
+          const afgOption = option.afg;
+          if (afgOption) {
+            window.minigameCenter.enableAfgService(afgOption, this.disableAds);
+          }
+          return Promise.resolve();
+        });
+      },
+      initGameFrame() {
+        const obj = document.getElementById("iframeShow");
+        const pageHeight = window.innerHeight + "px";
+    
+        if (util.isMobile()) {
+          obj.style.width = "100vw";
+          obj.style.height = `calc(${pageHeight}  - ${this.bannerEnabled ? 80 : 0}px)`;
+          this.ifSetXiaomiIframe && (obj.style.height = (this.bannerEnabled ? `calc(${pageHeight} - 200px)` : `${pageHeight}px`));
+        } else {
+          obj.style.width = `calc((${(window.innerHeight && window.innerHeight + "px") || "100vh"
+            } - 96px) * .5625)`;
+          obj.style.height = `calc(${(window.innerHeight && window.innerHeight + "px") || "100vh"
+            } - 2rem - ${this.bannerEnabled ? 80 : 0}px)`;
+          obj.style.margin = "2rem 0";
+          this.ifSetXiaomiIframe && (obj.style.height = `calc(${(window.innerHeight && window.innerHeight + "px") || "100vh"
+            } - 2rem - ${this.bannerEnabled ? "200px" : "0px"})`);
+        }
+    
+        const gameMenuEle = document.querySelector("#stretchBtnCtx .gameMenu");
+        if (gameMenuEle) {
+          gameMenuEle.style.width = window.isLightTheme ? "205px" : obj.style.width;
+        }
+        if (window.isLightTheme) {
+          const objUnfold = document.querySelector("#stretchBtnCtx #unfoldContent");
+          objUnfold&&(objUnfold.style.height = obj.style.height)
+        }
+        //this.menuWidth = obj.style.width;
+      },
+      loadGame() {
+        document.querySelector(".iframePosition") && (document.querySelector(".iframePosition").style.visibility = "visible");
+        this.initGameFrame();
+        let appOptions = this.getCurrentAppOptions();
+        if (appOptions) {
+          let gamePageUrl = this.getGamePageUrl();
+          const gamePageFrame = "iframeShow";
+          !this.getIfIsOpenPage() && this.loadGameForMinigameCenter(gamePageUrl, gamePageFrame);
+          if (!this.getIfHasMinigameSdk()) {
+            setTimeout(() => {
+              this.updateLoadingProgress(100);
+            }, [5, 6, 7, 8, 9, 10][Math.floor(Math.random() * 5)] * 1000)
+          }
+        }
+      },
+      loadGameForMinigameCenter(gamePageUrl, gamePageFrame) {
+        setTimeout(()=>{
+          if (window.minigameCenter) {
+            (window.minigameCenter.setGamePageUrl instanceof Function) && window.minigameCenter.setGamePageUrl(gamePageUrl);
+            (window.minigameCenter.setGamePageFrame instanceof Function) && window.minigameCenter.setGamePageFrame(gamePageFrame);
+            (window.minigameCenter.loadGamePage instanceof Function) && window.minigameCenter.loadGamePage();
+          }
+        },2000)
+      },
+      updateLoadingProgress(progress) {
+        if (this.currentProgress < progress) {
+          this.currentProgress = progress;
+        }
+      },
+      getGamePageUrlForBlank() {
+        let url = "";
+        const options = this.getCurrentOptions();
+        if (options) {
+          url = this.subChannelId === "/debug/" ? (options.debug_app_options.app_url || options.prod_app_options.app_url) : options.prod_app_options.app_url;
+        }
+        return url
+      },
+      getGamePageUrl() {
+        let gamePageUrl = "";
+        const options = this.getCurrentOptions();
+        if (options) {
+          gamePageUrl = this.subChannelId === "/debug/" ? (options.debug_app_options.app_url || options.prod_app_options.app_url) : options.prod_app_options.app_url;
+          if (this.isAllowLocalhostTest) {
+            const searchObj = util.getAllUrlParams();
+            if (searchObj.hasOwnProperty('gameurl') && searchObj["gameurl"].match(/^((https:\/\/localhost:)|(http:\/\/localhost:)|(https:\/\/127.0.0.1:)|(http:\/\/127.0.0.1:))\S*$/ig)) {
+              gamePageUrl = searchObj["gameurl"];
+            }
+          }
+          if (this.gameInfo.config_url && !gamePageUrl.includes("mn_config")) {
+            const configUrl = this.gameInfo.config_url;
+            if (gamePageUrl.indexOf("?") > 0) {
+              gamePageUrl = gamePageUrl + "&mn_config=" + configUrl;
+            } else {
+              gamePageUrl = gamePageUrl + "?mn_config=" + configUrl;
+            }
+            gamePageUrl += `&ts=${new Date().getTime()}`
+          }
+        }
+        return gamePageUrl
+      },
+      getCurrentOptions() {
+        let options = null;
+        if (this.gameInfo && this.gameInfo.base && this.gameInfo.base.options) {
+          options = JSON.parse(this.gameInfo.base.options);
+        }
+        return options
+      },
+      getCurrentAppOptions() {
+        let appOptions = null;
+        let options = this.getCurrentOptions()
+        if (options) {
+          appOptions = this.subChannelId === "/debug/" ? options.debug_app_options : options.prod_app_options;
+        }
+        return appOptions
+      },
+      getAppOptionsTarget(target) {
+        let initTarget = {
+          "is_open_page": false,
+          "has_minigame_sdk": true,
+          "is_external_url": false
+        };
+        const appOptions = this.getCurrentAppOptions();
+        if (appOptions && appOptions.hasOwnProperty(target)) {
+          initTarget[target] = appOptions[target];
+        }
+        return initTarget[target]
+      },
+      getIfHasMinigameSdk() {
+        return this.getAppOptionsTarget("has_minigame_sdk");
+      },
+      getIfIsOpenPage() {
+        return this.getAppOptionsTarget("is_open_page");
+      },
+      getCurrentStageCtx() {
+        let containerEle = document;
+        const fullScreenEle = document.querySelector(".stageCtxLayout[css-loadFullScreen]");
+        const halfScreenEle = document.querySelector(".stageCtxLayout[css-loadHalfScreen]");
+        if (fullScreenEle && halfScreenEle) {
+          if (this.loadPageConfig.otherStage.loadingMethod === "fullScreen" && fullScreenEle) {
+            containerEle = fullScreenEle;
+          } else {
+            containerEle = halfScreenEle;
+            if (this.loadPageConfig.thirdStage.masterSwitch && this.loadPageConfig.thirdStage.loadingMethod === "fullScreen") {
+              containerEle = fullScreenEle;
+            }
+          }
+        }
+        if (containerEle === fullScreenEle) {
+          fullScreenEle.style.display = "";
+          halfScreenEle.style.display = "none";
+        } else if (containerEle === halfScreenEle) {
+          fullScreenEle.style.display = "none";
+          halfScreenEle.style.display = "";
+        }
+        return containerEle;
+      },
+      step() {
+        const jsBridge = window.WebViewJavascriptBridge;
+        
+        const currentProgress = Math.floor(this.currentProgress);
+        this.percent++;
+        if (
+          this.percent === 99 &&
+          currentProgress < 100
+        ) {
+          this.percent = 98;
+        }
+        if (currentProgress >= 100 && this.percent === 100) {
+          jsBridge&&(jsBridge.callHandler("onProgress",  {progress:100}));
+          this.hideLoadingMask();
+          return;
+        }
+        jsBridge&&(jsBridge.callHandler("onProgress",  {progress:this.percent}));
+        if (this.percent < 100) {
+          setTimeout(this.step.bind(this), currentProgress >= 100 ? 10 : 100);
+        }
+      },
+      listenWhirl() {
+        const whirlTipEle = document.querySelector("#playPage #whirlTip");
+        const screen =
+          window.screen.orientation ||
+          window.screen.mozOrientation ||
+          window.screen.msOrientation ||
+          {};
+        const angle = screen.angle;
+        if (angle !== undefined) {
+          if (this.gameInfo.base.landscape && ![90, 270].includes(angle)) {
+            whirlTipEle && (whirlTipEle.style.display = "block");
+          } else if (!this.gameInfo.base.landscape && [90, 270].includes(angle)) {
+            whirlTipEle && (whirlTipEle.style.display = "block");
+          } else {
+            whirlTipEle && (whirlTipEle.style.display = "none");
+            setTimeout(this.initGameFrame.bind(this), 1000);
+          }
+        } else {
+          whirlTipEle && (whirlTipEle.style.display = "none");
+        }
+      },
+    }
+    </script>    <script>
+    const adsObj = {
+      googleAdSense: {
+        ifLoadScript: false,
+        loadScript({ adClientId, callbackFunc, propertyObj }) {
+          if (!this.ifLoadScript) {
+            const ADSENSE_URL =
+              `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js${adClientId ? '?client=' + adClientId : ''}`;
+    
+            util
+              .loadJsAsync(ADSENSE_URL, true, {
+                crossorigin: "anonymous",
+                ...propertyObj
+              })
+              .then(() => {
+                console.info("===> google ads sdk loaded");
+                this.ifLoadScript = true;
+                callbackFunc && (callbackFunc instanceof Function) && callbackFunc();
+              })
+              .catch((e) => {
+                console.error(e);
+              });
+          }
+        },
+        displayAd() {
+          (window.adsbygoogle = window.adsbygoogle || []).push({});
+        },
+        dealGoogleAdSize(ifLandscape) {
+          const inses = document.querySelectorAll("ins.pageCtx_adsbygoogle");
+          if (inses && inses.length) {
+            const insArray = Array.from(inses);
+            if (insArray) {
+              const size = { width: `300px`, height: `250px` }
+              const width = window.innerWidth;
+              if (width >= 340 || ifLandscape) {
+                size.width = "336px";
+                size.height = "280px";
+              }
+              insArray.forEach(insEle => {
+                insEle.style.height = size.height;
+                insEle.style.width = size.width;
+              })
+            }
+          }
+        }
+      },
+      taboola: {
+        ifLoadScript: false,
+        loadScript(scriptNetwork) {
+          if (!this.ifLoadScript) {
+            window._taboola = window._taboola || [];
+            _taboola.push({ article: 'auto' });
+            !function (e, f, u, i) {
+              if (!document.getElementById(i)) {
+                e.async = 1;
+                e.src = u;
+                e.id = i;
+                f.parentNode.insertBefore(e, f);
+              }
+            }(document.createElement('script'),
+              document.getElementsByTagName('script')[0],
+              `//cdn.taboola.com/libtrc/${scriptNetwork || "minigame-network"}/loader.js`,
+              'tb_loader_script');
+            if (window.performance && typeof window.performance.mark == 'function') { window.performance.mark('tbl_ic'); }
+            this.ifLoadScript = true;
+          }
+        },
+        addAdToContainer(adId, containerStr, ifInsertBefore, propertyObj) {
+          const adEle = document.createElement("div");
+          adEle.setAttribute("id", adId);
+          if (propertyObj) {
+            for (const key in propertyObj) {
+              if (Object.hasOwnProperty.call(propertyObj, key)) {
+                const value = propertyObj[key];
+                adEle.setAttribute(key, value);
+              }
+            }
+          }
+          const containerEle = document.querySelector(`${containerStr}`);
+          if (containerEle) {
+            if (ifInsertBefore) {
+              let referenceNode = null;
+              if (containerEle.hasChildNodes()) {
+                referenceNode = containerEle.childNodes[0];
+              }
+              containerEle.insertBefore(adEle, referenceNode)
+            } else {
+              containerEle.appendChild(adEle)
+            }
+          }
+          return Promise.resolve();
+        },
+        setAd(propertyObj) {
+          window._taboola = window._taboola || [];
+          _taboola.push({
+            target_type: 'mix', ...propertyObj
+          });
+        },
+        displayAd() {
+          window._taboola = window._taboola || [];
+          _taboola.push({ flush: true });
+        }
+      },
+      mda: {
+        addAdToContainer(id, containerStr, ifInsertBefore, propertyObj) {
+          const adEle = document.createElement("div");
+          adEle.setAttribute("id", id);
+          if (propertyObj) {
+            for (const key in propertyObj) {
+              if (Object.hasOwnProperty.call(propertyObj, key)) {
+                const value = propertyObj[key];
+                adEle.setAttribute(key, value);
+              }
+            }
+          }
+          const containerEle = document.querySelector(`${containerStr}`);
+          if (containerEle) {
+            if (ifInsertBefore) {
+              let referenceNode = null;
+              if (containerEle.hasChildNodes()) {
+                referenceNode = containerEle.childNodes[0];
+              }
+              containerEle.insertBefore(adEle, referenceNode)
+            } else {
+              containerEle.appendChild(adEle)
+            }
+          }
+          return Promise.resolve(adEle);
+        },
+        setAd(currentDom, target_url, material) {
+          currentDom.innerHTML = `
+            <a href="${target_url}" class="clickEnlarge" style="width: ${material.width || '100%'};height: ${material.height || '100%'};margin:auto" >
+                <div  style="width: 100%;height: 100%;background-repeat: no-repeat;background-position: center;background-size: cover;background-image:url('${material.url || '#'}');">
+                </div>
+            </a>
+          `;
+        },
+      },
+      iranAd: {
+        ifLoadScript: false,
+        loadScript({ appId, callbackFunc }) {
+          if (!this.ifLoadScript) {
+            const iranAdSdkUrl = `https://sdk.minigame.vip/js/adivery.global.js`;
+            return util.loadJsAsync(iranAdSdkUrl, true, {
+              crossorigin: "anonymous"
+            })
+              .then(() => {
+                console.info("===> iran ads sdk loaded");
+                this.ifLoadScript = true;
+                callbackFunc && (callbackFunc instanceof Function) && callbackFunc();
+                if (window.Adivery && (window.Adivery.configure instanceof Function)) {
+                  window.Adivery.configure(appId);
+                  return this.ifLoadScript;
+                }
+              })
+              .catch((e) => {
+                console.error(e);
+              });
+          } else {
+            return Promise.resolve(this.ifLoadScript);
+          }
+        },
+        addAdToContainer(eleIdStr, containerStr, ifInsertBefore, propertyObj) {
+          const adEle = document.createElement("div");
+          adEle.setAttribute("id", eleIdStr);
+          const adSpanEle = document.createElement("span");
+          adSpanEle.innerHTML = "Ads";
+          adSpanEle.setAttribute("style", "position: absolute;left: 10px;top: 2px;color: #00aecd;font-size: 14px;");
+          adEle.appendChild(adSpanEle);
+          if (propertyObj) {
+            for (const key in propertyObj) {
+              if (Object.hasOwnProperty.call(propertyObj, key)) {
+                const value = propertyObj[key];
+                adEle.setAttribute(key, value);
+              }
+            }
+          }
+          adEle.style.position = "relative";
+          const containerEle = document.querySelector(`${containerStr}`);
+          if (containerEle) {
+            if (ifInsertBefore) {
+              let referenceNode = null;
+              if (containerEle.hasChildNodes()) {
+                referenceNode = containerEle.childNodes[0];
+              }
+              containerEle.insertBefore(adEle, referenceNode)
+            } else {
+              containerEle.appendChild(adEle)
+            }
+          }
+          return Promise.resolve();
+        },
+        displayAd({ placememtId, eleIdStr, style }) {
+          if (window.Adivery && (window.Adivery.requestNativeAd instanceof Function) && placememtId) {
+            if (eleIdStr) {
+              const ele = document.getElementById(eleIdStr);
+              if (ele) {
+                window.Adivery.requestNativeAd(placememtId).then((ad) => {
+                  if (ad) {
+                    const headlineEle = document.createElement("span");
+                    headlineEle.innerHTML = ad.headline;
+                    headlineEle.setAttribute("style", "position: absolute;right: 10px;top: 2px;font-size: 12px;overflow: hidden;white-space: nowrap;text-overflow: ellipsis;width:calc(70% - 20px);direction: rtl;");
+                    ele.appendChild(headlineEle);
+                    const img = document.createElement("img");
+                    img.src = ad.image;
+                    img.setAttribute("style", style ? style : "width: 100%;height: 100%;object-fit: contain;");
+                    img.onclick = () => {
+                      ad.recordClick();
+                    };
+                    ele.appendChild(img);
+                    const descSpanEle = document.createElement("span");
+                    descSpanEle.innerHTML = ad.description;
+                    descSpanEle.setAttribute("style", "position: absolute;right: 10px;bottom: 5px;font-size: 12px;overflow: hidden;white-space: nowrap;text-overflow: ellipsis;width:calc(100% - 20px);direction: rtl;");
+                    ele.appendChild(descSpanEle);
+                  }
+                  console.log(ad);
+                  ad.recordImpression();
+                });
+              }
+            }
+          }
+        },
+      },
+      adxAd: {
+        ifLoadScript: false,
+        loadScript({ adUnits, callbackFunc }) {
+          if (!this.ifLoadScript) {
+            const url = `https://securepubads.g.doubleclick.net/tag/js/gpt.js`;
+            return util.loadJsAsync(url, true)
+              .then(() => {
+                console.info("===> adx ads sdk loaded");
+                this.ifLoadScript = true;
+                window.googletag = window.googletag || { cmd: [] };
+                const scriptEle = document.createElement("script");
+                scriptEle.text = this.defineAdUnitSlots(adUnits);
+                document.getElementsByTagName("head")[0].appendChild(scriptEle);
+                callbackFunc && (callbackFunc instanceof Function) && callbackFunc();
+                return this.ifLoadScript;
+              })
+              .catch((e) => {
+                console.error(e);
+              });
+          } else {
+            return Promise.resolve(this.ifLoadScript);
+          }
+        },
+        addAdToContainer(id, containerStr, ifInsertBefore, propertyObj) {
+          const adEle = document.createElement("div");
+          adEle.setAttribute("id", id);
+          if (propertyObj) {
+            for (const key in propertyObj) {
+              if (Object.hasOwnProperty.call(propertyObj, key)) {
+                const value = propertyObj[key];
+                adEle.setAttribute(key, value);
+              }
+            }
+          }
+          const scriptEle = document.createElement("script");
+          scriptEle.text = `googletag.cmd.push(function() {
+            googletag.display('${id}'); 
+          });`
+          adEle.appendChild(scriptEle);
+          const containerEle = document.querySelector(`${containerStr}`);
+          if (containerEle) {
+            if (ifInsertBefore) {
+              let referenceNode = null;
+              if (containerEle.hasChildNodes()) {
+                referenceNode = containerEle.childNodes[0];
+              }
+              containerEle.insertBefore(adEle, referenceNode)
+            } else {
+              containerEle.appendChild(adEle)
+            }
+          }
+          return Promise.resolve(adEle);
+        },
+        defineAdUnitSlots(adUnits = []) {
+          const notDislayTypes = ['INTERSTITIAL', 'TOP_ANCHOR', 'BOTTOM_ANCHOR', 'REWARDED']; // googletag.enums.OutOfPageFormat
+          const outOfPageAdUnits = adUnits.filter(adUnit => notDislayTypes.includes(adUnit.type));
+          const displayAdUnits = adUnits.filter(adUnit => !notDislayTypes.includes(adUnit.type));
+    
+          // 插页式广告，锚点广告
+          const outOfPageSlotStr = outOfPageAdUnits.map((adUnit, index) => {
+            return `
+              const outOfPageSlot_${index} = googletag.defineOutOfPageSlot(
+                '${adUnit.adUnitCode}',
+                googletag.enums.OutOfPageFormat['${adUnit.type}']);
+              if (outOfPageSlot_${index}) {
+                outOfPageSlot_${index}.addService(googletag.pubads());
+              }
+            `
+          }).join('\n')
+    
+          // 固定广告
+          const slotStr = displayAdUnits.map(adUnit => {
+            if (!(adUnit.adUnitCode && adUnit.size && adUnit.elementId)) {
+              return '';
+            }
+            return `googletag.defineSlot(
+                "${adUnit.adUnitCode}",
+                ${JSON.stringify(adUnit.size)},
+                "${adUnit.elementId}").addService(googletag.pubads());`;
+          }).join('\n')
+    
+          return `googletag.cmd.push(function() {
+            ${outOfPageSlotStr}
+            ${slotStr}
+            googletag.pubads().enableSingleRequest();
+            googletag.pubads().collapseEmptyDivs();
+            googletag.enableServices();
+          })`
+        },
+      },
+      commomFuncObj: {
+        changAdByTime(adEleArray, autoTime, ifCycle) {
+          if (adEleArray && Array.isArray(adEleArray)) {
+            let index = 0;
+            const func = () => {
+              index = (index === (adEleArray.length - 1) ? 0 : (++index))
+              adEleArray.forEach(
+                (m, i) => {
+                  if (m && m.style) {
+                    m.style.display = index === i ? 'block' : 'none';
+                  }
+                })
+              ifCycle && setTimeout(func, autoTime * 1000)
+            }
+            setTimeout(func, autoTime * 1000)
+          }
+        }
+      }
+    }
+    </script>    
+    <link rel="icon" type="image/x-icon" href="https://indigo.minigame.vip/static/images/favicon.ico">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="canonical" href="https://www.minigame.vip/game/drive-mad/play">
+    
+    
+    <!-- Global site tag (gtag.js) - Google Analytics -->
+    <script async="" src="./play_files/js"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() { dataLayer.push(arguments); }
+      gtag('js', new Date());
+            gtag('config', "G-F35RV359HF");
+    </script>
+    
+    <style>
+    /*主题颜色设置*/
+    :root{
+        --theme-color:#000;
+        --theme-color-secondary:#999; /*该主题暂无用该变量*/
+        --theme-color-primary:#4582FF;
+        --theme-background:#fff;
+        --theme-background-secondary:#fff;
+        --theme-content-background:#fff;
+        --border-radius: 8px;
+        --border-radius-sm: 12px;
+        --border-radius-lg: 15px;
+        --font-size-sm: 12px;
+        --font-size-lg: 18px;
+        --font-size-xl: 20px;
+        --play-btn-bg: #fff;
+        --play-btn-color: #fff;
+        --play-btn-padding-top-bottom: 4px;
+        --play-btn-padding-left-right: 24px;
+    }
+    /*全局基本样式设置*/
+    body{
+        background-color: var(--theme-background);
+        font-family: Helvetica;
+    }
+    
+    .play-btn {
+        display: inline-block;
+        text-align: center;
+        font-size: var(--font-size-sm);
+        font-weight: 500;
+        line-height: 17px;
+        color: var(--play-btn-color);
+        border-radius: var(--border-radius-sm);
+        background-color: var(--play-btn-bg);
+        padding: var(--play-btn-padding-top-bottom) var(--play-btn-padding-left-right);
+    }
+    .play-btn.is-primary {
+        background-color: var(--theme-color-primary);
+    }
+    
+    .ellipsis {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .text-center {
+        text-align: center;
+    }
+      * {
+        -webkit-tap-highlight-color: transparent;
+      }
+    
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%
+      }
+    
+      .globalMain {
+        display: flex;
+        position: relative;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        min-height: 100vh
+      }
+    
+      .globalMain:after {
+        position: fixed;
+        left: 0;
+        top: 0;
+        z-index: -1;
+        width: 100vw;
+        height: 100vh;
+        content: ""
+      }
+    
+      .divUrl {
+        display: none;
+        overflow: hidden;
+        z-index: 4;
+        width: 100vw;
+        height: 0;
+        font-weight: 800;
+        font-size: 20px;
+        color: #747474;
+        transition: height .5s
+      }
+    
+      .mainStyle {
+        display: flex;
+        overflow-x: hidden;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        min-height: calc(100vh - 125px)
+      }
+    
+      .clickEnlarge:active {
+        -webkit-tap-highlight-color: transparent;
+        animation: clickEnlarge 0.2s linear;
+      }
+    
+      @keyframes clickEnlarge {
+        0% {
+          transform: scale(1);
+          box-shadow: 0 3px 18px 0 rgb(0 0 0 / 16%);
+        }
+    
+        100% {
+          transform: scale(1.4);
+          box-shadow: 0 3px 18px 0 rgb(0 0 0 / 16%);
+        }
+      } 
+      .display-center-center{
+          display: flex;
+          justify-content: center;
+          align-items: center;
+      }
+    </style>
+    
+        <meta name="keywords" content="">
+        <meta name="description" content="">
+    <style>
+        .dialog[data-v-7e32e512] {
+            position: fixed;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            z-index: 200;
+            background:var(--theme-background);
+        }
+
+        #adSenseArea[data-v-7e32e512] {
+            position: fixed;
+            bottom: 0;
+            z-index: 999;
+            min-width: 100%;
+            max-width: 100%;
+            min-height: 50px;
+            max-height: 80px;
+            text-align: center;
+        }
+
+        #iframeShow[data-v-7e32e512] {
+            z-index: 998;
+            border: 0 solid black !important;
+        }
+
+        .iframePosition[data-v-7e32e512] {
+            display: flex;
+            justify-content: center;
+        }
+
+        .closeStyle[data-v-7e32e512] {
+            position: fixed;
+            right: 0;
+            top: 0;
+            z-index: 999;
+        }
+
+        #playPage[data-v-7e32e512] {
+            max-width: 100vw;
+            min-height: 98vh;
+            max-height: 100vh;
+            background: #fff;
+        }
+
+        #playPage[data-v-7e32e512] .el-loading-mask {
+            background-color: rgb(255, 255, 255);
+        }
+
+        #playPage[data-v-7e32e512] .el-loading-spinner .circular {
+            display: none;
+        }
+
+        .loadingLayout[data-v-7e32e512] {
+            display: flex;
+            position: fixed;
+            right: calc(50vw - 378px);
+            top: 0;
+            bottom: 0;
+            z-index: 201;
+            flex-direction: column;
+            justify-content: space-evenly;
+            align-items: center;
+            width: 756px;
+        }
+
+        .landscapeLoadingLayout[data-v-7e32e512] {
+            position: fixed;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            z-index: 201;
+        }
+
+        .whirlTip[data-v-7e32e512] {
+            position: fixed;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            z-index: 999;
+            background-color: rgb(0, 0, 0, 0.7);
+            background-image: url(/static/images/play/whirlTip.gif);
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: 157.5px 125px;
+        }
+
+        .stage[data-v-7e32e512] {
+            margin: auto;
+            min-width: 320px;
+            max-width: 375px;
+        }
+
+        .landscape[data-v-7e32e512] {
+            margin: auto;
+            min-width: 568px;
+            max-width: 667px;
+        }
+
+        .landscape>div[data-v-7e32e512]> :first-child {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            z-index: -1;
+            filter: blur(4px);
+            transform: scale(1.2);
+        }
+
+        .landscape>div[data-v-7e32e512]> :last-child {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            z-index: 2;
+        }
+
+        .landscapeCtx[data-v-7e32e512] {
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .verticalStage[data-v-7e32e512] {
+            position: fixed;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 100vw;
+            height: 100vh;
+            background:var(--theme-background);
+        }
+
+        .verticalStage>div[data-v-7e32e512] {
+            margin: auto;
+            min-width: 320px;
+            max-width: 375px;
+        }
+
+        .white[data-v-7e32e512] {
+            position: fixed;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            z-index: 2;
+            width: 100vw;
+            height: 100vh;
+            background: #fff;
+        }
+
+        .scrollbar[data-v-7e32e512]::-webkit-scrollbar {
+            width: 2px;
+            height: 2px;
+        }
+
+        .scrollbar[data-v-7e32e512]::-webkit-scrollbar-track {
+            border-radius: 2px;
+            background: #fff;
+        }
+
+        .scrollbar[data-v-7e32e512]::-webkit-scrollbar-thumb {
+            border-radius: 10px;
+            background: #bfbfbf;
+        }
+
+        .scrollbar[data-v-7e32e512]::-webkit-scrollbar-thumb:hover {
+            background: #333;
+        }
+        .back{
+            --back-background: #222733;
+            height: 50px;
+            background-color: var(--back-background);
+            width: 100%;
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            padding-left: 20px;
+        }
+    .trembling {
+      animation: trembling 3s linear infinite backwards;
+      -webkit-animation: trembling 3s linear infinite backwards;
+      -moz-animation: trembling 3s linear infinite backwards
+    }
+
+    @-webkit-keyframes trembling {
+      26% {
+        transform: rotate(0deg) scale(1);
+        -webkit-transform: rotate(0deg) scale(1)
+      }
+
+      28% {
+        transform: rotate(-2deg) scale(1.04);
+        -webkit-transform: rotate(-2deg) scale(1.04)
+      }
+
+      32% {
+        transform: rotate(1deg) scale(1.01);
+        -webkit-transform: rotate(1deg) scale(1.01)
+      }
+
+      34% {
+        transform: rotate(-2deg) scale(1.02);
+        -webkit-transform: rotate(-2deg) scale(1.02)
+      }
+
+      36% {
+        transform: rotate(3deg) scale(1);
+        -webkit-transform: rotate(3deg) scale(1)
+      }
+
+      39% {
+        transform: rotate(-1deg) scale(1);
+        -webkit-transform: rotate(-1deg) scale(1)
+      }
+
+      44% {
+        transform: rotate(0deg) scale(1);
+        -webkit-transform: rotate(0deg) scale(1)
+      }
+    }
+
+    @keyframes trembling {
+      26% {
+        transform: rotate(0deg) scale(1);
+        -webkit-transform: rotate(0deg) scale(1)
+      }
+
+      28% {
+        transform: rotate(-2deg) scale(1.04);
+        -webkit-transform: rotate(-2deg) scale(1.04)
+      }
+
+      32% {
+        transform: rotate(1deg) scale(1.01);
+        -webkit-transform: rotate(1deg) scale(1.01)
+      }
+
+      34% {
+        transform: rotate(-2deg) scale(1.02);
+        -webkit-transform: rotate(-2deg) scale(1.02)
+      }
+
+      36% {
+        transform: rotate(3deg) scale(1);
+        -webkit-transform: rotate(3deg) scale(1)
+      }
+
+      39% {
+        transform: rotate(-1deg) scale(1);
+        -webkit-transform: rotate(-1deg) scale(1)
+      }
+
+      44% {
+        transform: rotate(0deg) scale(1);
+        -webkit-transform: rotate(0deg) scale(1)
+      }
+    }        
+    </style>
+<script src="./play_files/gamecenter-sdk.js.tải xuống"></script><style data-cursor="cursor"></style></head>
+
+<body>
+    <div data-server-rendered="true">
+        <div id="__layout">
+            <div id="Outermost" data-v-e0517636="">
+                <div id="playPage" data-v-7e32e512="" data-v-e0517636="">
+                    <div id="stageCtx" style="position:fixed;z-index:0;" data-v-7e32e512="">
+                        <div data-v-7e32e512="">  
+                                            
+                                            <style>
+                                              .loadFullScreen[css-loadFullScreen] {
+                                                position: fixed;
+                                                right: 0;
+                                                left: 0;
+                                                top: 0;
+                                                bottom: 0;
+                                                z-index: 201;
+                                                width: 100vw;
+                                                background: linear-gradient(rgba(0, 0, 0, 1), rgba(0, 0, 0, 1));
+                                              }
+                                            
+                                            </style>                                    
+                        </div>
+                        <div id="dialog" class="dialog" data-v-7e32e512="" style="background-color: black;">
+                            <div style="visibility: visible;" class="iframePosition" data-v-7e32e512="">
+                                <iframe id="iframeShow" allowfullscreen="" style="border: none; width: calc(448.875px); height: calc((894px - 2rem) - 0px); margin: 2rem 0px;" src="./play_files/minigame-index.html"> </iframe>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="whiteScreen" class="white" style="z-index:-1;" data-v-7e32e512=""></div>
+                    <!-- end banner -->
+                    <div style="display:none" class="whirlTip" id="whirlTip" data-v-7e32e512=""></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    window.addEventListener("DOMContentLoaded",checkImgFunc);
+    const gameInfo = {"id":"542","app_id":"drive-mad","base":{"app_url":"https://drive-mad.apps.minigame.vip/minigame-index.html","app_debug_url":"https://drive-mad.debug-apps.minigame.vip/minigame-index.html","display_name":"Drive Mad","tag_line":"","game_helper":true,"landscape":false,"game_menu":"{\"left\":false,\"top\":-1}","game_type":["parkour"],"keywords":{"content":"","contentArray":[]},"description":{"content":""},"like_count":107,"rating":"4.9","others_option":[],"options":"{\"debug_app_options\":{\"is_open_page\":false,\"has_minigame_sdk\":true,\"app_url\":\"https://drive-mad.debug-apps.minigame.vip/minigame-index.html\",\"is_external_url\":false},\"prod_app_options\":{\"is_open_page\":false,\"has_minigame_sdk\":true,\"app_url\":\"https://drive-mad.apps.minigame.vip/minigame-index.html\",\"is_external_url\":false}}","percentage":98.00000000000001},"game_material":{"icon":"https://res.minigame.vip/gc-assets/drive-mad/drive-mad_icon.png","big_icon":"https://res.minigame.vip/gc-assets/drive-mad/drive-mad_big_icon.png","banner":"https://res.minigame.vip/gc-assets/drive-mad/drive-mad_banner.png","flash":"https://res.minigame.vip/gc-assets/drive-mad/drive-mad_flash.png","video":"https://res.minigame.vip/gc-assets/minigame/weiyou.png","small_icon":"https://res.minigame.vip/gc-assets/drive-mad/drive-mad_icon_small.png","thumbnail":""},"game_ad":{"google_ad_channel_id":"9494044467","google_adsense_banner":true},"created_at":"1688104711466","support_match":false,"is_test_game":false,"titleContent":{"ifShowTitleContent":false},"config_url":"https://indigo.minigame.vip/v1/api/channel/indigo/main/game/drive-mad/config"};
+    const gameOption={"game_id":542,"app_id":"","id":"","last_modified":"","show_flash":{"enabled":false,"url":""},"game_menu":{"game_helper":false},"vconsole":false,"heartbeat":null,"pay_config":{"enabled":false,"url":"https://sdk.minigame.vip/api/channel/{channel}/{sub_channel}/game/{game}/{channel}-pay.json"},"afg":{"attributes":{"data-ad-host":"","data-ad-client":"ca-pub-3962242587190395","data-ad-host-channel":"","data-ad-channel":"9494044467","data-ad-frequency-hint":"30s"},"config":{"preloadAdBreaks":"on","onReady":true,"preroll":false,"banner":false,"interstitial_for_rewarded":false,"ignorePreload":true}},"m150ad":{"ads":"https://api.150ad.com/sdk/v1/ads.js","adsData":"https://api.150ad.com/data/data.json"},"ga":{"config":{"gid":""}},"instana":null,"android":{"enabled":false},"cpl":{"adflyer":{"enabled":false},"flat":{"enabled":false}},"ads_disabled":false,"match":{"enabled":false,"platform":""},"event":{"enabled":false,"interstitialAdInterval":0}};
+    const loadPageConfig = {"firstStage":{"adSwitch":false,"crossSwitch":true,"masterSwitch":true,"timeCount":10,"timeCountSkipSwitch":true,"timeCountSwitch":true,"titleContents":["1"]},"otherStage":{"adType":"taboola","loadingMethod":"fullScreen","preroll":false},"secondStage":{"adSwitch":false,"crossSwitch":true,"masterSwitch":false,"timeCount":5,"timeCountSkipSwitch":false,"timeCountSwitch":true},"thirdStage":{"adSwitch":false,"crossSwitch":true,"loadingMethod":"halfScreen","masterSwitch":true,"titleContents":[]}};
+    const disableAds=false;
+    const bannerEnabled=false;
+    const GAMECENTER_SDK_URL="gamecenter-sdk.js";
+    const subChannelId="/";
+    const maxHistoryCount=10;
+    const timeDivisionMultiplexing={"banner":{"enable":false,"changeTime":30,"adType":["google","taboola"],ifCycle:true},"loadpage":{"enable":false,"changeTime":10,"adType":["google","taboola"],ifCycle:true}};
+    const channelName="indigo";
+    const subChannelName="main";
+    const isIranAd=false;
+    const isAllowLocalhostTest=false;
+    let gameManifestJsonUrl="/v1/api/games/drive-mad/webmanifest.json";
+    const resourceList = [{"key":"favicon","desc":"","path":"/static/images/favicon.ico"},{"key":"logo","desc":"","path":"/static/images/logo.png"},{"key":"logo-notext","desc":"","path":"/static/images/logo-notext.png"},{"key":"lazy-img","desc":"","path":"/static/images/lazy-img.png"},{"key":"webmanifest-icon","desc":"","path":"/static/images/weiyou.png"},{"key":"webmanifest","desc":"","path":"/static/other/mini.webmanifest.json"},{"key":"assistant-logo","desc":"","path":"/static/images/play/m.png"},{"key":"privacy","desc":"","path":"./public/other/privacy.md"},{"key":"terms","desc":"","path":"./public/other/terms.md"}]
+    const isLightTheme = false;
+    window.isLightTheme = isLightTheme;
+    const globalPlatformInfo={
+        channelName,subChannelName,gameManifestJsonUrl,
+            channelConfigId :2827
+    };
+    window.globalPlatformInfo=globalPlatformInfo;
+    window.channelName=channelName;
+    window.subChannelName=subChannelName;
+    const ifTestSpeedChannel=false;
+    const ifLogEvent=true;
+
+    let showFloadAdDisplay=()=>{
+    }
+    let enterLoadFunc=()=>{
+        showFloadAdDisplay();
+    };
+    util.setHistoryGame(gameInfo.app_id,maxHistoryCount);
+    playObj.init({globalPlatformInfo,disableAds,bannerEnabled,gameInfo,loadPageConfig,gameOption,GAMECENTER_SDK_URL,enterLoadFunc,subChannelId,ifTestSpeedChannel,isIranAd,isAllowLocalhostTest,ifLogEvent,page:"playPage"});
+	playObj.logEvent("page_load");    
+
+
+    playObj.initCurrentStage();
+    playObj.displayStage();
+    playObj.selectLoadMode();
+</script>
+</body></html>

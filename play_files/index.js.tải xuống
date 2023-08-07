@@ -1484,7 +1484,7 @@ var moduleOverrides = Object.assign({}, Module);
 var arguments_ = [];
 var thisProgram = "./this.program";
 var quit_ = (status, toThrow) => {
-    // throw toThrow;
+    throw toThrow;
 };
 var ENVIRONMENT_IS_WEB = typeof window == "object";
 var ENVIRONMENT_IS_WORKER = typeof importScripts == "function";
